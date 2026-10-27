@@ -122,7 +122,7 @@ jobs:
           xcrun simctl bootstatus "$device_id" -b 2>&1 | tee "$RUNNER_TEMP/ios-e2e/boot.log"
           flutter devices --machine > "$RUNNER_TEMP/ios-e2e/flutter-devices.json"
       - name: Device E2E with synthetic health source and normal iOS launch
-        timeout-minutes: 12
+        timeout-minutes: 8
         shell: bash
         run: |
           set -o pipefail
