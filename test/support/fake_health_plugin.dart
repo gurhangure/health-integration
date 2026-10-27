@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health/health.dart';
 
-/// Implements only the plugin operations used by the demo, with synthetic data.
+/// Implements the app's plugin operations with synthetic data.
 class FakeHealthPlugin extends Fake implements Health {
   bool authorizationCompletes = true;
   bool? granted = true;

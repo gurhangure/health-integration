@@ -62,7 +62,7 @@ class HealthSource {
       HealthDataType.HEART_RATE,
       HealthDataType.SLEEP_SESSION,
     ].contains(type)) {
-      throw ArgumentError.value(type, 'type', 'Unsupported demo metric');
+      throw ArgumentError.value(type, 'type', 'Unsupported health metric');
     }
     return backend == HealthBackend.healthKit &&
             type == HealthDataType.SLEEP_SESSION

@@ -1,7 +1,7 @@
-# Health Connect Demo
+# Health Integration
 
-A small Flutter portfolio project that reads Android Health Connect and Apple
-HealthKit through one screen, bounded data processing, and testable UI state.
+A Flutter application that displays read-only summaries from Android Health
+Connect and Apple HealthKit, with bounded data processing and testable UI state.
 Health data stays on the device; the app has no backend, account system,
 network client, or app-managed persistence.
 
@@ -86,11 +86,11 @@ Studio's SDK Manager.
 | `android.permission.health.READ_HEART_RATE` | Heart-rate samples |
 | `android.permission.health.READ_SLEEP` | Sleep sessions |
 
-All three read grants are required for this intentionally small screen. A
+All three read grants are required before reading Android health data. A
 partial grant is treated as denied. Launch and Refresh check existing grants;
 **Grant read permissions** opens system authorization, then actual grants are
 rechecked. Repeated denials may require enabling access in **Health Connect →
-App permissions → Health Connect Demo**. Returning from Settings does not
+App permissions → Health Integration**. Returning from Settings does not
 automatically refresh.
 
 No write, background-read, extended-history, location, or activity-recognition
@@ -108,7 +108,7 @@ and [record types and permissions](https://developer.android.com/health-and-fitn
 The deployment target remains iOS 15.0. Building requires macOS, Xcode 26.1.1
 or newer with its license accepted by the developer, and an installed simulator
 runtime or configured device signing. Android/iOS identifiers and signing
-settings have been preserved; the HealthKit entitlement is now linked to Runner.
+settings are preserved; the HealthKit entitlement is linked to Runner.
 
 `health` transitively depends on `device_info_plus` 13.3.0, which
 [requires Xcode 26.1.1 or newer](https://pub.dev/packages/device_info_plus/versions/13.3.0).
@@ -158,6 +158,8 @@ are manual. Unsigned simulator CI does not validate device provisioning.
 Install Flutter 3.47.2 and the native tools for your target, then run:
 
 ```sh
+git clone https://github.com/gurhangure/health-integration.git
+cd health-integration
 flutter doctor
 flutter pub get --enforce-lockfile
 flutter devices
@@ -179,8 +181,26 @@ flutter build ios --simulator --debug --no-codesign
 ```
 
 Run the iOS command on macOS only. Existing Android release settings still use a
-debug signing key; this is a portfolio/debug project, not store distribution
-configuration. Do not publish that artifact as a production release.
+debug signing key. Store distribution requires a separate signing and release
+configuration; do not publish a debug-signed artifact as a production release.
+
+### Display name and technical identifiers
+
+The application display name is **Health Integration** on Android, iOS, and the
+Flutter screen. The repository is
+[`gurhangure/health-integration`](https://github.com/gurhangure/health-integration).
+The existing technical identifiers are retained to preserve Dart imports, native
+application identity, and signing configuration:
+
+| Identifier | Value |
+| --- | --- |
+| Dart package and internal iOS bundle name | `health_connect_demo` |
+| Android namespace/application ID | `com.example.health_connect_demo` |
+| iOS bundle ID | `com.example.healthConnectDemo` |
+
+The plugin-owned `flutter_health` method channel and generated references are
+unchanged. The display name does not rename existing installed applications'
+technical identities.
 
 ## Testing and CI
 
@@ -222,25 +242,22 @@ its command, actual elapsed time, timeout limit, and exit status. Launch and VM
 URI recovery retain partial stdout/stderr on failure, including timeouts;
 installation and Driver output continue streaming into `flutter-driver.log`.
 VM Service authentication URLs are redacted from helper-generated diagnostics.
-Timeouts remain unchanged, and tests are not retried.
+Tests are not retried.
 
 This launch workaround addresses the missed announcement observed in
-[run 40580731543](https://github.com/gurhangure/health-connect-demo/actions/runs/40580731543):
+[run 40580731543](https://github.com/gurhangure/health-integration/actions/runs/40580731543):
 Runner emitted its VM Service URI and remained alive, while Flutter waited for
 the announcement. Its live log reader started after launch was requested. The
 blank app screenshot and absence of executed assertions support a pre-test
 discovery stall consistent with the upstream race; the precise log-reader
 readiness timing was not recorded.
-As checked on 28 October 2026, the pinned Flutter 3.47.2 and current stable 3.47.8
-both lack the readiness wait introduced by
+The pinned Flutter 3.47.2 lacks the readiness wait introduced by
 [upstream fix #193142](https://github.com/flutter/flutter/pull/193142) for
 [issue #181771](https://github.com/flutter/flutter/issues/181771);
 [issue #189059](https://github.com/flutter/flutter/issues/189059) was linked to
 the same race. A direct switch to `flutter drive` would reuse that affected
 launcher; attaching to an already launched app avoids it. SDK source is unchanged.
 Replace this workaround when a verified stable release includes the fix.
-The working launch infrastructure is retained; the new HealthKit coverage remains
-unverified until its CI results are observed.
 
 Device tests launch the actual Flutter app with a synthetic `HealthSource`, a
 fixed clock, the real repository, and the real controller. On iOS an additional
@@ -267,13 +284,15 @@ flutter test test/widget
 flutter test integration_test/health_app_test.dart -d YOUR_ANDROID_DEVICE_ID
 ```
 
-**Verification status:** dependency resolution and local static analysis completed
-successfully during this update. Automated tests and native builds were not run
-locally. Check the repository's Actions tab for execution results; every test level,
-Android/iOS build, and CI result remains **unverified** until observed. Local Apple developer tools
-also report an unaccepted Xcode license; no license or system settings were
-changed. Please verify CI after publication and schedule physical-device checks
-separately.
+**Verification snapshot:** at portfolio review,
+[HealthKit feature run 40593997488](https://github.com/gurhangure/health-integration/actions/runs/40593997488)
+had passed formatting, static analysis, unit, component integration, and widget
+tests, plus the Android build/E2E and iOS production simulator build. The iOS job
+was still running with E2E pending; its final result was **not verified**. This
+snapshot does not establish results for subsequent branding changes. Consult
+[Actions](https://github.com/gurhangure/health-integration/actions) for the run
+matching the current commit. Automated tests and native builds were not executed
+locally during the portfolio review. Physical-device checks remain separate.
 
 ## Physical-device follow-up with synthetic records
 
@@ -300,7 +319,7 @@ above, launch the app, and tap **Review Health access**. Check the requested typ
 are steps, heart rate, and sleep with no write permissions. Confirm visible values
 after enabling reads. For controlled values, add a small step entry, a heart-rate
 sample, and a bounded sleep entry through Apple's Health app or an external test
-tool; this demo never writes those records. Existing records, source aggregation,
+tool; this app never writes those records. Existing records, source aggregation,
 and sync can change totals.
 
 Deny all reads and Refresh: expect the neutral empty/access message rather than a

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'health_controller.dart';
 
-/// Starts the mobile read-only health demo.
+/// Starts the read-only Health Integration application.
 void main() => runApp(const HealthApp());
 
 /// Supplies the app's Material theme and single health screen.
@@ -17,6 +17,7 @@ class HealthApp extends StatelessWidget {
   /// Builds the app shell shared by normal runs and device E2E tests.
   @override
   Widget build(BuildContext context) => MaterialApp(
+    title: 'Health Integration',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.teal),
     home: HealthScreen(controller: controller),
@@ -77,12 +78,12 @@ class _HealthScreenState extends State<HealthScreen> {
     final sleep = data?.sleep;
     final heartTime = data?.heartTime;
     return Scaffold(
-      appBar: AppBar(title: const Text('Health Connect Demo')),
+      appBar: AppBar(title: const Text('Health Integration')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const Text('Read-only demo • Health data stays on this device.'),
+            const Text('Read-only access • Health data stays on this device.'),
             const SizedBox(height: 16),
             if (loading) const LinearProgressIndicator(),
             const SizedBox(height: 8),

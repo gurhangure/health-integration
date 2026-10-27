@@ -101,7 +101,7 @@ class HealthController extends ChangeNotifier {
             message:
                 'Permission not granted. Allow read access to steps, heart '
                 'rate and sleep. If the prompt does not appear, open Health '
-                'Connect → App permissions → Health Connect Demo.',
+                'Connect → App permissions → Health Integration.',
           ),
         );
         return;

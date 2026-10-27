@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <application
-        android:label="Health Connect Demo"
+        android:label="Health Integration"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

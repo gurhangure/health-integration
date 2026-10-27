@@ -1,5 +1,5 @@
 name: health_connect_demo
-description: Read-only Android Health Connect and Apple HealthKit portfolio demo.
+description: Read-only health summaries from Android Health Connect and Apple HealthKit.
 publish_to: 'none'
 version: 1.0.0+1
 
