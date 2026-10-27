@@ -48,15 +48,52 @@ void main() {
 
   if (Platform.isIOS) {
     testWidgets(
-      'normal iOS launch explains that HealthKit is not implemented',
+      'Apple Health synthetic metrics, private read access, and authorization retry',
       (tester) async {
-        app.main();
+        final source = populatedAppleSource();
+        final controller = fixtureController(source);
+        addTearDown(controller.dispose);
+        runApp(app.HealthApp(controller: controller));
         await tester.pumpAndSettle();
+        expect(source.requests, 0);
+        final review = find.text('Review Health access');
+        await tester.scrollUntilVisible(review, 200);
+        await tester.tap(review);
+        await tester.pumpAndSettle();
+        expect(source.requests, 1);
+        expect(find.textContaining('123\n'), findsOneWidget);
+        expect(find.textContaining('72 bpm'), findsOneWidget);
+        expect(find.textContaining('2 h 0 min'), findsOneWidget);
+
+        source.data.clear();
+        source.steps = 0;
+        final refresh = find.text('Refresh');
+        await tester.scrollUntilVisible(refresh, 200);
+        await tester.tap(refresh);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('72 bpm'), findsNothing);
         expect(
-          find.textContaining('HealthKit reading is not implemented'),
+          find.textContaining('Apple Health hides read permission status'),
           findsOneWidget,
         );
-        expect(find.text('Grant read permissions'), findsNothing);
+        expect(find.textContaining('Permissions are granted'), findsNothing);
+
+        source.authorizationCompletes = false;
+        await tester.scrollUntilVisible(review, 200);
+        await tester.tap(review);
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('authorization could not complete'),
+          findsOneWidget,
+        );
+        source.authorizationCompletes = true;
+        await tester.scrollUntilVisible(review, 200);
+        await tester.tap(review);
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Apple Health hides read permission status'),
+          findsOneWidget,
+        );
       },
       timeout: const Timeout(Duration(minutes: 2)),
     );

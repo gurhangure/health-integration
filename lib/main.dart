@@ -114,13 +114,14 @@ class _HealthScreenState extends State<HealthScreen> {
                   : sleep == null
                   ? empty
                   : '${sleep.inHours} h ${sleep.inMinutes.remainder(60)} min',
-              'Last 24 hours • session duration, including awake time',
+              _controller.sleepDetail,
             ),
             const SizedBox(height: 16),
-            if (state.phase == HealthPhase.permission)
+            if (state.phase == HealthPhase.permission ||
+                state.canRequestPermission)
               FilledButton(
                 onPressed: () => _controller.refresh(requestPermission: true),
-                child: const Text('Grant read permissions'),
+                child: Text(_controller.permissionActionLabel),
               ),
             OutlinedButton.icon(
               onPressed: loading ? null : () => _controller.refresh(),

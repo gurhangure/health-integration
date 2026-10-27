@@ -1,24 +1,28 @@
 # Health Connect Demo
 
-A small Flutter portfolio project that demonstrates read-only Android Health
-Connect access, bounded data processing, permission handling, and testable UI
-state. Health data stays on the device; the app has no backend, account system,
+A small Flutter portfolio project that reads Android Health Connect and Apple
+HealthKit through one screen, bounded data processing, and testable UI state.
+Health data stays on the device; the app has no backend, account system,
 network client, or app-managed persistence.
 
-**Supported app targets: Android and iOS only.** Health Connect reading is
-implemented on Android. The iOS app displays an explicit unavailable message;
-Apple HealthKit reading is not implemented and no HealthKit permissions or
-capabilities are configured. Web and desktop targets are not included.
+**Supported app targets: Android and iOS only.** Native read paths are implemented
+for Health Connect and HealthKit. Synthetic tests exercise both contracts; actual
+HealthKit access still requires physical-device verification. Web and desktop
+targets are not included.
 
 ## Features
 
 - Today's aggregated steps since local midnight.
 - Latest heart-rate sample within the last 30 days, including its timestamp.
-- Sleep-session duration over the last 24 hours, with intervals clipped to the
-  window and overlaps merged. This includes awake time within sessions; it is
-  not a total of asleep stages.
+- Sleep interval duration over the last 24 hours, clipped to the window with
+  overlaps merged. Android uses sleep sessions; iOS combines visible in-bed,
+  asleep, awake, core/light, deep, and REM intervals. This includes recorded awake
+  or in-bed time and is not an asleep-only total.
 - Explicit authorization, refresh, loading, empty, unavailable, and retry states.
-- Permission rechecks before every read; revocation clears previous values.
+- Android permission rechecks before every read; all refreshes clear old values.
+  On iOS, revocation is reflected through newly visible data or empty results.
+- Privacy-aware Apple Health messages: read denial and empty data cannot be
+  distinguished, so no false claim of granted read access is made.
 - Synthetic unit, component integration, widget, and mobile device E2E suites.
 
 The app reads existing records. It does not measure pulse, count steps with phone
@@ -43,13 +47,16 @@ HealthScreen → HealthController → HealthService → HealthSource → health 
 
 - `lib/main.dart`: Material 3 app and one scrollable screen with live status
   announcements. Widgets render state and forward actions.
-- `lib/health_controller.dart`: availability, all-or-nothing read grants,
+- `lib/health_controller.dart`: availability, Android grant checks and unknown
+  HealthKit read access,
   refresh transitions, safe error messages, duplicate-request protection, and
   disposal guards. Only successful reads expose values to the screen.
 - `lib/health_service.dart`: bounded queries and validation, latest heart-rate
   selection, and sleep interval merging. An injectable clock fixes test windows.
-- `lib/health_source.dart`: a small native plugin boundary replaced by synthetic
-  fixtures in tests. Production calls use the unchanged native health APIs.
+- `lib/health_source.dart`: detects the native store, maps shared metrics to
+  supported plugin types, and requests reads only. It calls the existing plugin
+  channel for HealthKit availability because health 13.3.2 implements that native
+  method without exposing a Dart wrapper.
 
 The screen owns its default controller. An injected controller stays owned by its
 caller. In-flight native calls cannot be canceled by this plugin boundary;
@@ -98,13 +105,10 @@ and [record types and permissions](https://developer.android.com/health-and-fitn
 
 ### iOS
 
-The existing deployment target is iOS 15.0. Building requires macOS, Xcode 26.1.1
-or newer with its license accepted by the developer, and an installed iOS
-simulator runtime or configured device signing. The iOS shell and its
-unavailable state are covered by the configured simulator CI job. HealthKit
-entitlements, usage descriptions, native authorization, and health queries are
-outside the current implementation. Android/iOS identifiers and signing settings
-have been preserved.
+The deployment target remains iOS 15.0. Building requires macOS, Xcode 26.1.1
+or newer with its license accepted by the developer, and an installed simulator
+runtime or configured device signing. Android/iOS identifiers and signing
+settings have been preserved; the HealthKit entitlement is now linked to Runner.
 
 `health` transitively depends on `device_info_plus` 13.3.0, which
 [requires Xcode 26.1.1 or newer](https://pub.dev/packages/device_info_plus/versions/13.3.0).
@@ -112,6 +116,42 @@ CI selects the runner's installed Xcode 26.1.1 through the iOS job's
 `DEVELOPER_DIR` and logs the selected Xcode and simulator SDK versions before
 building. This avoids relying on the runner's default Xcode without changing
 dependency versions or system-wide settings.
+
+Runner declares `com.apple.developer.healthkit` in `Runner.entitlements`, linked
+in Debug, Profile, and Release. `NSHealthShareUsageDescription` explains that
+steps, heart rate, and sleep are read for an on-device summary. No writes,
+background delivery, or clinical records are enabled.
+`NSHealthUpdateUsageDescription` is omitted because no write access is requested.
+The plugin receives only `HealthDataAccess.READ` for every requested type.
+
+| Metric | Android type | HealthKit equivalent | Display window |
+| --- | --- | --- | --- |
+| Steps | `STEPS` / StepsRecord aggregate | `STEPS` / stepCount aggregate | Since local midnight |
+| Heart rate | `HEART_RATE` | `HEART_RATE` / heartRate | Newest visible sample in 30 days |
+| Sleep | `SLEEP_SESSION` | sleepAnalysis: in-bed, unspecified asleep, awake, core/light, deep, REM | Union of visible intervals in 24 hours |
+
+HealthKit has no direct equivalent to an Android sleep-session record. In-bed
+records and detailed stages may overlap, so the shared service merges all
+intervals without double counting or filling gaps. Totals can differ between
+platforms depending on what sources record. The plugin's iOS queries use a strict
+start-date filter; sleep reads include an extra day's lookback so ordinary
+crossing nights can be clipped to the display window. Records beginning more than
+48 hours before Refresh can be omitted, even if they extend into that window.
+
+Apple deliberately [hides read authorization status](https://developer.apple.com/documentation/healthkit/authorizing-access-to-health-data).
+The app can read previously authorized data on launch without displaying a system
+prompt. Tap **Review Health access** to request access explicitly; this action
+remains available because the app cannot inspect grants or distinguish revocation
+from missing data. Completion of the authorization sheet does not prove any read
+permission was granted. Denied/partial access can yield empty or partial results.
+Incomplete requests, restrictions, unavailable services, and query exceptions
+show guidance without exposing native response payloads.
+
+For device signing, open Runner in Xcode, select an eligible development team,
+and ensure the existing App ID and provisioning profile support HealthKit. The
+capability is already configured in this project; do not change its bundle ID or
+remove the entitlement to work around signing failures. Account/profile changes
+are manual. Unsigned simulator CI does not validate device provisioning.
 
 ## Setup and execution
 
@@ -128,6 +168,7 @@ On a physical Android phone, enable USB debugging and accept the computer's
 debugging prompt. Open Health Connect and complete setup, then launch the app,
 tap **Grant read permissions**, enable the three types, and confirm. Values or
 explicit empty states appear. Tap **Refresh** after changing data or permissions.
+On iOS, tap **Review Health access** and use the Apple Health authorization sheet.
 No API keys, OAuth setup, Google Cloud project, or backend configuration is needed.
 
 For an Android debug APK or an unsigned iOS simulator build:
@@ -153,7 +194,7 @@ iOS jobs. Its application build targets are exclusively Android and iOS.
 | Unit | `test/unit/` | Query windows, missing/zero data, invalid values, heart selection, overlapping sleep, controller transitions, retry, concurrent refresh and disposal | Ubuntu Flutter test runner |
 | Component integration | `test/integration/` | Real controller + repository + synthetic native boundary; authorization, revocation, processing failures and disposal | Ubuntu Flutter test runner |
 | Widget | `test/widget/` | Loading, disabled actions, permission interaction, values, revocation, empty/error/unavailable states, live semantics and large text | Ubuntu Flutter test runner |
-| Device E2E | `integration_test/`, `test_driver/` | Authorize → read three metrics → refresh → revoke; also normal iOS launch | API 35 Android emulator and available iPhone simulator on macOS 15 |
+| Device E2E | `integration_test/`, `test_driver/` | Authorize → read three metrics → refresh → revoke; also Apple Health privacy and authorization retry | API 35 Android emulator and available iPhone simulator on macOS 15 |
 
 The quality job also runs `dart format --output=none --set-exit-if-changed .` and
 `flutter analyze`. Android builds the normal debug APK; iOS builds the normal
@@ -161,7 +202,7 @@ unsigned simulator app before E2E runs.
 
 The iOS job selects a simulator runtime matching the active Xcode simulator SDK
 and bounds simulator boot to five minutes and the complete E2E command (including
-its build and launch) to twelve minutes. Each on-device test body has a two-minute
+its build and launch) to eight minutes. Each on-device test body has a two-minute
 timeout. Verbose build output and driver results are saved; failed runs also
 capture simulator state, a screenshot of the synthetic test app, process state,
 and Runner logs. The `ios-e2e-diagnostics` artifact is retained for seven days.
@@ -198,19 +239,23 @@ both lack the readiness wait introduced by
 the same race. A direct switch to `flutter drive` would reuse that affected
 launcher; attaching to an already launched app avoids it. SDK source is unchanged.
 Replace this workaround when a verified stable release includes the fix.
-Its effectiveness for this project remains unverified until CI completes.
+The working launch infrastructure is retained; the new HealthKit coverage remains
+unverified until its CI results are observed.
 
 Device tests launch the actual Flutter app with a synthetic `HealthSource`, a
-fixed clock, the real repository, and the real controller. On iOS this fixture
-journey explicitly simulates Android provider availability; a second test checks
-the normal iOS unavailable screen. No test uses personal health records, live
+fixed clock, the real repository, and the real controller. On iOS an additional
+fixture journey exercises HealthKit authorization privacy, overlapping Apple sleep
+categories, hidden denial/revocation, and authorization retry. Component tests
+exercise the real source mapping through a deterministic plugin fake and mocked
+availability channel. No test uses personal health records, live
 Health Connect, or external services. Fixtures are only imported by tests and
 are not enabled in the production entry point.
 
 The synthetic suites do **not** verify the native health plugin's channel
 serialization, Android's system permission dialog, real provider queries,
 Settings revocation, or signing/store distribution. Those need the separate
-physical-device follow-up below. iOS HealthKit is not part of the suite.
+physical-device follow-up below. Synthetic E2E does not verify actual HealthKit
+authorization, store queries, or device provisioning.
 
 For explicitly requested local verification, deterministic suites and Android E2E
 use these commands; iOS CI uses the launch-and-attach flow described above:
@@ -247,6 +292,25 @@ As a separate manual acceptance pass, check full/partial denial, authorization,
 empty data, refresh, Settings revocation, provider unavailability, and the native
 privacy link. Do not remove system Health Connect packages to force an error.
 These steps are instructions, not a claim that device verification has occurred.
+
+## Apple Health physical-device follow-up
+
+Use a dedicated test device and synthetic records only. Configure signing as
+above, launch the app, and tap **Review Health access**. Check the requested types
+are steps, heart rate, and sleep with no write permissions. Confirm visible values
+after enabling reads. For controlled values, add a small step entry, a heart-rate
+sample, and a bounded sleep entry through Apple's Health app or an external test
+tool; this demo never writes those records. Existing records, source aggregation,
+and sync can change totals.
+
+Deny all reads and Refresh: expect the neutral empty/access message rather than a
+claim that authorization was granted. Allow only some types and check the partial
+summary. Revoke access in Health's app/data-access settings and Refresh: prior
+values must clear or update to what remains visible. Test authorization
+cancellation and available device restrictions, retry, empty stores, sleep
+overlap/clipping, large text, and accessibility announcements. No result from
+these manual checks is claimed here. The Health app's own sync settings are
+independent of this app.
 
 ## Screenshots
 

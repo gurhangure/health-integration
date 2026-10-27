@@ -1,13 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:health/health.dart';
 import 'package:health_connect_demo/health_controller.dart';
+import 'package:health_connect_demo/health_source.dart';
 import 'package:health_connect_demo/health_service.dart';
 
 /// Isolates presentation transitions from record processing and native plugins.
 class StubHealthService extends Fake implements HealthService {
-  HealthConnectSdkStatus? status = HealthConnectSdkStatus.sdkAvailable;
+  /// Selects provider-specific presentation while keeping the service isolated.
+  @override
+  HealthBackend backend = HealthBackend.healthConnect;
+
+  HealthAvailability? status = HealthAvailability.available;
   bool granted = true;
   bool grantOnRequest = true;
   int reads = 0;
@@ -19,7 +23,7 @@ class StubHealthService extends Fake implements HealthService {
 
   /// Supplies controlled availability, including unknown provider failures.
   @override
-  Future<HealthConnectSdkStatus?> availability() async => status;
+  Future<HealthAvailability?> availability() async => status;
 
   /// Counts grant checks to verify authorization is rechecked after the prompt.
   @override
@@ -50,7 +54,7 @@ void main() {
   late HealthController controller;
   setUp(() {
     service = StubHealthService();
-    controller = HealthController(service: service, isAndroid: true);
+    controller = HealthController(service: service);
   });
   tearDown(() => controller.dispose());
 
@@ -96,7 +100,7 @@ void main() {
     service.status = null;
     await controller.refresh();
     expect(controller.state.phase, HealthPhase.failure);
-    service.status = HealthConnectSdkStatus.sdkUnavailable;
+    service.status = HealthAvailability.unavailable;
     await controller.refresh(requestPermission: true);
     expect(controller.state.phase, HealthPhase.unavailable);
     expect(service.checks, 0);
@@ -128,7 +132,7 @@ void main() {
   });
 
   test('ignores a read completion after disposal', () async {
-    final disposable = HealthController(service: service, isAndroid: true);
+    final disposable = HealthController(service: service);
     service.pending = Completer<HealthSnapshot>();
     var notifications = 0;
     disposable.addListener(() => notifications++);
@@ -140,12 +144,12 @@ void main() {
     expect(notifications, 1);
   });
 
-  test('iOS reports unavailable without touching Health Connect', () async {
-    final ios = HealthController(service: service, isAndroid: false);
-    addTearDown(ios.dispose);
-    await ios.refresh(requestPermission: true);
-    expect(ios.state.phase, HealthPhase.unavailable);
-    expect(ios.state.message, contains('HealthKit reading is not implemented'));
+  test('unsupported platforms never request health data', () async {
+    service.backend = HealthBackend.unsupported;
+    service.status = HealthAvailability.unavailable;
+    await controller.refresh(requestPermission: true);
+    expect(controller.state.phase, HealthPhase.unavailable);
+    expect(controller.state.message, contains('Android and iOS only'));
     expect(service.checks, 0);
     expect(service.requests, 0);
     expect(service.reads, 0);

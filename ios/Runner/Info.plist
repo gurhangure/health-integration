@@ -24,6 +24,8 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Read your steps, heart rate, and sleep data to display a summary on this device. Your health data is not uploaded or shared.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

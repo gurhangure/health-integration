@@ -11,9 +11,14 @@ final fixtureNow = DateTime(2026, 10, 27, 12);
 
 /// Supplies synthetic native records and records calls for boundary assertions.
 class FakeHealthSource extends Fake implements HealthSource {
-  HealthConnectSdkStatus? status = HealthConnectSdkStatus.sdkAvailable;
+  /// Selects the native authorization contract without consulting the host OS.
+  @override
+  HealthBackend backend = HealthBackend.healthConnect;
+
+  HealthAvailability? status = HealthAvailability.available;
   bool granted = false;
   bool grantOnRequest = true;
+  bool authorizationCompletes = true;
   int? steps = 123;
   Object? failure;
   Completer<void>? availabilityGate;
@@ -27,7 +32,7 @@ class FakeHealthSource extends Fake implements HealthSource {
 
   /// Can hold availability pending to exercise loading and disposal behavior.
   @override
-  Future<HealthConnectSdkStatus?> availability() async {
+  Future<HealthAvailability?> availability() async {
     availabilityChecks++;
     await availabilityGate?.future;
     if (failure != null) throw failure!;
@@ -36,15 +41,18 @@ class FakeHealthSource extends Fake implements HealthSource {
 
   /// Returns the current grant, including simulated revocation.
   @override
-  Future<bool> hasPermissions() async {
+  Future<bool?> hasPermissions() async {
     permissionChecks++;
-    return granted;
+    return backend == HealthBackend.healthKit ? null : granted;
   }
 
   /// Simulates either full authorization or a denied/partial grant.
   @override
   Future<void> requestPermissions() async {
     requests++;
+    if (backend == HealthBackend.healthKit && !authorizationCompletes) {
+      throw const HealthAuthorizationException();
+    }
     granted = grantOnRequest;
   }
 
@@ -74,6 +82,7 @@ HealthDataPoint point(
   DateTime start, {
   DateTime? end,
   num value = 72,
+  HealthPlatformType platform = HealthPlatformType.googleHealthConnect,
 }) => HealthDataPoint(
   uuid: 'synthetic-${type.name}-${start.millisecondsSinceEpoch}',
   value: NumericHealthValue(numericValue: value),
@@ -85,7 +94,7 @@ HealthDataPoint point(
       : HealthDataUnit.MINUTE,
   dateFrom: start,
   dateTo: end ?? start,
-  sourcePlatform: HealthPlatformType.googleHealthConnect,
+  sourcePlatform: platform,
   sourceDeviceId: 'synthetic-device',
   sourceId: 'synthetic-source',
   sourceName: 'Synthetic fixture',
@@ -110,5 +119,31 @@ FakeHealthSource populatedSource() => FakeHealthSource()
 /// Wires real presentation and processing to controlled native data.
 HealthController fixtureController(FakeHealthSource source) => HealthController(
   service: HealthService(source: source, now: () => fixtureNow),
-  isAndroid: true,
 );
+
+/// Supplies Apple sleep categories with intentional overlap and synthetic values.
+FakeHealthSource populatedAppleSource() {
+  final source = populatedSource()..backend = HealthBackend.healthKit;
+  source.data[HealthDataType.HEART_RATE] = [
+    point(
+      HealthDataType.HEART_RATE,
+      fixtureNow.subtract(const Duration(minutes: 5)),
+      platform: HealthPlatformType.appleHealth,
+    ),
+  ];
+  source.data[HealthDataType.SLEEP_SESSION] = [
+    point(
+      HealthDataType.SLEEP_IN_BED,
+      fixtureNow.subtract(const Duration(hours: 3)),
+      end: fixtureNow.subtract(const Duration(hours: 1)),
+      platform: HealthPlatformType.appleHealth,
+    ),
+    point(
+      HealthDataType.SLEEP_DEEP,
+      fixtureNow.subtract(const Duration(hours: 2)),
+      end: fixtureNow.subtract(const Duration(hours: 1)),
+      platform: HealthPlatformType.appleHealth,
+    ),
+  ];
+  return source;
+}

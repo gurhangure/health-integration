@@ -2,7 +2,7 @@ import 'package:health/health.dart';
 
 import 'health_source.dart';
 
-/// Contains one read result; null metrics mean no records in their windows.
+/// Contains one read result; null metrics mean no visible or usable value.
 class HealthSnapshot {
   const HealthSnapshot({
     this.steps,
@@ -30,16 +30,19 @@ class HealthService {
   final HealthSource _source;
   final DateTime Function() _now;
 
-  /// Checks provider availability after plugin configuration.
-  Future<HealthConnectSdkStatus?> availability() => _source.availability();
+  /// Identifies the source for accurate authorization and metric descriptions.
+  HealthBackend get backend => _source.backend;
 
-  /// Rechecks all grants so revocation clears previously displayed records.
-  Future<bool> hasPermissions() => _source.hasPermissions();
+  /// Checks provider availability after plugin configuration.
+  Future<HealthAvailability?> availability() => _source.availability();
+
+  /// Returns explicit Android grants or unknown HealthKit read access.
+  Future<bool?> hasPermissions() => _source.hasPermissions();
 
   /// Requests read-only access through the native authorization UI.
   Future<void> requestPermissions() => _source.requestPermissions();
 
-  /// Reads today's steps, the latest heart sample, and 24-hour sleep sessions.
+  /// Reads today's steps, the latest heart sample, and merged 24-hour sleep intervals.
   Future<HealthSnapshot> read() async {
     final now = _now();
     final midnight = DateTime(now.year, now.month, now.day);

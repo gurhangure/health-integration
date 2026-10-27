@@ -2,8 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:health/health.dart';
-import 'package:health_connect_demo/health_controller.dart';
+import 'package:health_connect_demo/health_source.dart';
 import 'package:health_connect_demo/main.dart';
 
 import '../support/fake_health_source.dart';
@@ -120,8 +119,7 @@ void main() {
   testWidgets('unavailable provider does not offer authorization', (
     tester,
   ) async {
-    final source = FakeHealthSource()
-      ..status = HealthConnectSdkStatus.sdkUnavailable;
+    final source = FakeHealthSource()..status = HealthAvailability.unavailable;
     final controller = fixtureController(source);
     addTearDown(controller.dispose);
     await tester.pumpWidget(HealthApp(controller: controller));
@@ -130,19 +128,20 @@ void main() {
     expect(find.text('Grant read permissions'), findsNothing);
   });
 
-  testWidgets('iOS explains its platform limitation without requesting data', (
-    tester,
-  ) async {
-    final controller = HealthController(isAndroid: false);
-    addTearDown(controller.dispose);
-    await tester.pumpWidget(HealthApp(controller: controller));
-    await tester.pumpAndSettle();
-    expect(
-      find.textContaining('HealthKit reading is not implemented'),
-      findsOneWidget,
-    );
-    expect(find.text('Grant read permissions'), findsNothing);
-  });
+  testWidgets(
+    'unsupported platforms explain the limitation without requesting data',
+    (tester) async {
+      final source = FakeHealthSource()
+        ..backend = HealthBackend.unsupported
+        ..status = HealthAvailability.unavailable;
+      final controller = fixtureController(source);
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(HealthApp(controller: controller));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Android and iOS only'), findsOneWidget);
+      expect(find.text('Grant read permissions'), findsNothing);
+    },
+  );
 
   testWidgets('large text remains scrollable without layout errors', (
     tester,
