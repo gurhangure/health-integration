@@ -44,7 +44,7 @@ void main() {
     expect(find.textContaining('72 bpm'), findsNothing);
     expect(find.text('Grant read permissions'), findsOneWidget);
     expect(source.totalReads, 2);
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   if (Platform.isIOS) {
     testWidgets(
@@ -58,6 +58,7 @@ void main() {
         );
         expect(find.text('Grant read permissions'), findsNothing);
       },
+      timeout: const Timeout(Duration(minutes: 2)),
     );
   }
 }

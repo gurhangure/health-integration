@@ -159,6 +159,14 @@ The quality job also runs `dart format --output=none --set-exit-if-changed .` an
 `flutter analyze`. Android builds the normal debug APK; iOS builds the normal
 unsigned simulator app before E2E runs.
 
+The iOS job selects a simulator runtime matching the active Xcode simulator SDK
+and bounds simulator boot to five minutes and the complete E2E command (including
+its build and launch) to twelve minutes. Each on-device test body has a two-minute
+timeout. Verbose Flutter output uses an expanded test reporter; failed runs also
+capture simulator state, a screenshot of the synthetic test app, process state,
+and Runner logs. The `ios-e2e-diagnostics` artifact is retained for seven days.
+The command's failure status is preserved when saving logs. Tests are not retried.
+
 Device tests launch the actual Flutter app with a synthetic `HealthSource`, a
 fixed clock, the real repository, and the real controller. On iOS this fixture
 journey explicitly simulates Android provider availability; a second test checks

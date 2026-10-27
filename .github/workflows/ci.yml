@@ -85,6 +85,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Verify selected Xcode and simulator SDK
         run: |
+          mkdir -p "$RUNNER_TEMP/ios-e2e"
           xcodebuild -version
           xcrun --sdk iphonesimulator --show-sdk-version
       - uses: subosito/flutter-action@v2
@@ -96,22 +97,52 @@ jobs:
       - name: Build production entry point without signing
         run: flutter build ios --simulator --debug --no-codesign
       - name: Select and boot an available iPhone simulator
+        timeout-minutes: 5
+        shell: bash
         run: |
-          xcrun simctl list devices available --json > "$RUNNER_TEMP/simulators.json"
-          device_id=$(python3 - "$RUNNER_TEMP/simulators.json" <<'PY'
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/ios-e2e/simulators.json"
+          sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          device_id=$(python3 - "$RUNNER_TEMP/ios-e2e/simulators.json" "$sdk_version" <<'PY'
           import json
           import sys
           with open(sys.argv[1]) as source:
               devices = json.load(source)['devices']
-          iphones = [device for runtime in sorted(devices, reverse=True)
-                     if 'iOS' in runtime for device in devices[runtime]
+          runtime = 'com.apple.CoreSimulator.SimRuntime.iOS-' + '-'.join(sys.argv[2].split('.')[:2])
+          iphones = [device for device in devices.get(runtime, [])
                      if device['name'].startswith('iPhone') and device['isAvailable']]
           if not iphones:
-              raise SystemExit('No available iPhone simulator on this runner.')
+              raise SystemExit(f'No available iPhone simulator matching SDK {sys.argv[2]}.')
+          print(f"Selected {iphones[0]['name']} on {runtime}: {iphones[0]['udid']}", file=sys.stderr)
           print(iphones[0]['udid'])
           PY
           )
-          xcrun simctl bootstatus "$device_id" -b
           echo "IOS_DEVICE_ID=$device_id" >> "$GITHUB_ENV"
+          xcrun simctl bootstatus "$device_id" -b 2>&1 | tee "$RUNNER_TEMP/ios-e2e/boot.log"
+          flutter devices --machine > "$RUNNER_TEMP/ios-e2e/flutter-devices.json"
       - name: Device E2E with synthetic health source and normal iOS launch
-        run: flutter test integration_test/health_app_test.dart -d "$IOS_DEVICE_ID"
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter test integration_test/health_app_test.dart -d "$IOS_DEVICE_ID" \
+            --no-pub --verbose --reporter expanded \
+            2>&1 | tee "$RUNNER_TEMP/ios-e2e/flutter-test.log"
+      - name: Capture iOS failure diagnostics
+        if: ${{ failure() || cancelled() }}
+        timeout-minutes: 3
+        run: |
+          mkdir -p "$RUNNER_TEMP/ios-e2e"
+          xcrun simctl list devices --json > "$RUNNER_TEMP/ios-e2e/simulators-final.json" 2>&1 || true
+          if [ -n "${IOS_DEVICE_ID:-}" ]; then
+            xcrun simctl io "$IOS_DEVICE_ID" screenshot "$RUNNER_TEMP/ios-e2e/simulator.png" || true
+            xcrun simctl spawn "$IOS_DEVICE_ID" launchctl list > "$RUNNER_TEMP/ios-e2e/processes.txt" 2>&1 || true
+            xcrun simctl spawn "$IOS_DEVICE_ID" log show --last 15m --style compact \
+              --predicate 'process == "Runner"' > "$RUNNER_TEMP/ios-e2e/runner.log" 2>&1 || true
+          fi
+      - name: Upload iOS launch and test diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-e2e-diagnostics
+          path: ${{ runner.temp }}/ios-e2e
+          retention-days: 7
