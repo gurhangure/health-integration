@@ -75,19 +75,23 @@ void main() {
     final controller = fixtureController(source);
     addTearDown(controller.dispose);
     final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
-    await tester.pumpWidget(HealthApp(controller: controller));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Permissions are granted'), findsOneWidget);
-    expect(find.textContaining('No data available\n'), findsNWidgets(3));
-    expect(
-      tester.getSemantics(find.byKey(const ValueKey('status'))),
-      matchesSemantics(
-        label: controller.state.message,
-        isLiveRegion: true,
-        textDirection: TextDirection.ltr,
-      ),
-    );
+    try {
+      await tester.pumpWidget(HealthApp(controller: controller));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Permissions are granted'), findsOneWidget);
+      expect(find.textContaining('No data available\n'), findsNWidgets(3));
+      expect(
+        tester.getSemantics(find.byKey(const ValueKey('status'))),
+        matchesSemantics(
+          label: controller.state.message,
+          isLiveRegion: true,
+          textDirection: TextDirection.ltr,
+        ),
+      );
+    } finally {
+      // Release before Flutter's end-of-test semantics verification.
+      semantics.dispose();
+    }
   });
 
   testWidgets('provider errors give a safe message and refresh recovers', (
@@ -155,7 +159,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Refresh'));
+    // Build offscreen lazy children by scrolling at the larger text scale.
+    await tester.scrollUntilVisible(
+      find.text('Refresh'),
+      200,
+      scrollable: find.byType(Scrollable),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Refresh').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
