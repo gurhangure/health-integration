@@ -176,6 +176,13 @@ including assertion failures, with a five-minute response deadline. CI terminate
 the app after diagnostics are collected. Android keeps its existing `flutter test`
 E2E command.
 
+Every native launch-helper subprocess reports a flushed `START`/`END` stage,
+its command, actual elapsed time, timeout limit, and exit status. Launch and VM
+URI recovery retain partial stdout/stderr on failure, including timeouts;
+installation and Driver output continue streaming into `flutter-driver.log`.
+VM Service authentication URLs are redacted from helper-generated diagnostics.
+Timeouts remain unchanged, and tests are not retried.
+
 This launch workaround addresses the missed announcement observed in
 [run 40580731543](https://github.com/gurhangure/health-connect-demo/actions/runs/40580731543):
 Runner emitted its VM Service URI and remained alive, while Flutter waited for

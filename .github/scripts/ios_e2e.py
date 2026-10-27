@@ -3,6 +3,7 @@
 import os
 import plistlib
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -10,11 +11,53 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
+def redacted(text):
+    """Decode partial output and hide VM Service authentication URLs in reports."""
+    if isinstance(text, bytes):
+        text = text.decode("utf-8", errors="replace")
+    return re.sub(r"(?:https?|wss?)://[^\s\"'<>]+", "<VM Service URI>", text or "")
+
+
+def report_output(stage, error):
+    """Keep captured failure output instead of discarding TimeoutExpired details."""
+    for stream in ("stdout", "stderr"):
+        output = getattr(error, stream, None)
+        if output:
+            print(f"{stage} partial {stream}:\n{redacted(output)}", file=sys.stderr, flush=True)
+
+
+def run_command(stage, args, **options):
+    """Identify every command and report its actual duration, limit, and outcome."""
+    command = redacted(shlex.join(args))
+    started = time.monotonic()
+    print(f"START {stage}: {command} (timeout={options.get('timeout')}s)", flush=True)
+    try:
+        result = subprocess.run(args, **options)
+    except subprocess.TimeoutExpired as error:
+        elapsed = time.monotonic() - started
+        report_output(stage, error)
+        raise RuntimeError(
+            f"TIMEOUT {stage} after {elapsed:.1f}s (limit={error.timeout}s): {command}"
+        ) from None
+    except subprocess.CalledProcessError as error:
+        elapsed = time.monotonic() - started
+        report_output(stage, error)
+        raise RuntimeError(
+            f"FAILED {stage} after {elapsed:.1f}s (exit={error.returncode}): {command}"
+        ) from None
+    print(
+        f"END {stage} after {time.monotonic() - started:.1f}s (exit={result.returncode})",
+        flush=True,
+    )
+    return result
+
+
 def vm_service_uri(device, pid):
     """Recover this Runner process's announcement from retained simulator logs."""
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
-        result = subprocess.run(
+        result = run_command(
+            "VM Service URI recovery",
             [
                 "xcrun", "simctl", "spawn", device, "log", "show",
                 "--last", "3m", "--style", "compact",
@@ -45,10 +88,14 @@ def main():
     app = Path("build/ios/iphonesimulator/Runner.app")
     with (app / "Info.plist").open("rb") as source:
         bundle_id = plistlib.load(source)["CFBundleIdentifier"]
-    subprocess.run(
-        ["xcrun", "simctl", "install", device, str(app)], check=True, timeout=60
+    run_command(
+        "installation",
+        ["xcrun", "simctl", "install", device, str(app)],
+        check=True,
+        timeout=60,
     )
-    launched = subprocess.run(
+    launched = run_command(
+        "launch",
         [
             "xcrun", "simctl", "launch", device, bundle_id,
             "--enable-dart-profiling", "--disable-vm-service-publication",
@@ -66,7 +113,8 @@ def main():
     uri = vm_service_uri(device, match.group(1))
     # Do not print the URI: its path contains an ephemeral authentication code.
     print("VM Service announcement recovered; attaching integration driver.", flush=True)
-    return subprocess.run(
+    return run_command(
+        "Flutter Driver attachment",
         [
             "flutter", "drive", "--no-pub", "-d", device,
             "--driver=test_driver/health_app_test.dart",
@@ -80,7 +128,5 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except subprocess.TimeoutExpired:
-        sys.exit("An iOS E2E subprocess exceeded its timeout.")
     except (OSError, KeyError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         sys.exit(f"iOS E2E launch/attach failed: {error}")
