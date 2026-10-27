@@ -153,7 +153,7 @@ iOS jobs. Its application build targets are exclusively Android and iOS.
 | Unit | `test/unit/` | Query windows, missing/zero data, invalid values, heart selection, overlapping sleep, controller transitions, retry, concurrent refresh and disposal | Ubuntu Flutter test runner |
 | Component integration | `test/integration/` | Real controller + repository + synthetic native boundary; authorization, revocation, processing failures and disposal | Ubuntu Flutter test runner |
 | Widget | `test/widget/` | Loading, disabled actions, permission interaction, values, revocation, empty/error/unavailable states, live semantics and large text | Ubuntu Flutter test runner |
-| Device E2E | `integration_test/` | Authorize → read three metrics → refresh → revoke; also normal iOS launch | API 35 Android emulator and available iPhone simulator on macOS 15 |
+| Device E2E | `integration_test/`, `test_driver/` | Authorize → read three metrics → refresh → revoke; also normal iOS launch | API 35 Android emulator and available iPhone simulator on macOS 15 |
 
 The quality job also runs `dart format --output=none --set-exit-if-changed .` and
 `flutter analyze`. Android builds the normal debug APK; iOS builds the normal
@@ -162,10 +162,36 @@ unsigned simulator app before E2E runs.
 The iOS job selects a simulator runtime matching the active Xcode simulator SDK
 and bounds simulator boot to five minutes and the complete E2E command (including
 its build and launch) to twelve minutes. Each on-device test body has a two-minute
-timeout. Verbose Flutter output uses an expanded test reporter; failed runs also
+timeout. Verbose build output and driver results are saved; failed runs also
 capture simulator state, a screenshot of the synthetic test app, process state,
 and Runner logs. The `ios-e2e-diagnostics` artifact is retained for seven days.
 The command's failure status is preserved when saving logs. Tests are not retried.
+
+The iOS suite is built explicitly, installed, and launched paused using `simctl`.
+`.github/scripts/ios_e2e.py` waits up to 90 seconds for the launched PID's VM
+Service announcement in retained Runner logs, then attaches through Flutter's
+supported `drive --use-existing-app` option. `test_driver/health_app_test.dart`
+uses the SDK's `integrationDriver` to resume and report the same on-device tests,
+including assertion failures, with a five-minute response deadline. CI terminates
+the app after diagnostics are collected. Android keeps its existing `flutter test`
+E2E command.
+
+This launch workaround addresses the missed announcement observed in
+[run 40580731543](https://github.com/gurhangure/health-connect-demo/actions/runs/40580731543):
+Runner emitted its VM Service URI and remained alive, while Flutter waited for
+the announcement. Its live log reader started after launch was requested. The
+blank app screenshot and absence of executed assertions support a pre-test
+discovery stall consistent with the upstream race; the precise log-reader
+readiness timing was not recorded.
+As checked on 28 October 2026, the pinned Flutter 3.47.2 and current stable 3.47.8
+both lack the readiness wait introduced by
+[upstream fix #193142](https://github.com/flutter/flutter/pull/193142) for
+[issue #181771](https://github.com/flutter/flutter/issues/181771);
+[issue #189059](https://github.com/flutter/flutter/issues/189059) was linked to
+the same race. A direct switch to `flutter drive` would reuse that affected
+launcher; attaching to an already launched app avoids it. SDK source is unchanged.
+Replace this workaround when a verified stable release includes the fix.
+Its effectiveness for this project remains unverified until CI completes.
 
 Device tests launch the actual Flutter app with a synthetic `HealthSource`, a
 fixed clock, the real repository, and the real controller. On iOS this fixture
@@ -179,13 +205,14 @@ serialization, Android's system permission dialog, real provider queries,
 Settings revocation, or signing/store distribution. Those need the separate
 physical-device follow-up below. iOS HealthKit is not part of the suite.
 
-For explicitly requested local verification, the same commands used by CI are:
+For explicitly requested local verification, deterministic suites and Android E2E
+use these commands; iOS CI uses the launch-and-attach flow described above:
 
 ```sh
 flutter test test/unit
 flutter test test/integration
 flutter test test/widget
-flutter test integration_test/health_app_test.dart -d YOUR_MOBILE_DEVICE_ID
+flutter test integration_test/health_app_test.dart -d YOUR_ANDROID_DEVICE_ID
 ```
 
 **Verification status:** dependency resolution and local static analysis completed

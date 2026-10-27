@@ -32,6 +32,8 @@ jobs:
         run: dart format --output=none --set-exit-if-changed .
       - name: Static analysis
         run: flutter analyze
+      - name: Validate iOS launcher syntax
+        run: python3 -m py_compile .github/scripts/ios_e2e.py
       - name: Unit tests
         run: flutter test test/unit
       - name: Component and data-boundary integration tests
@@ -124,9 +126,12 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          flutter test integration_test/health_app_test.dart -d "$IOS_DEVICE_ID" \
-            --no-pub --verbose --reporter expanded \
-            2>&1 | tee "$RUNNER_TEMP/ios-e2e/flutter-test.log"
+          # Build the actual suite, then avoid the affected SDK simulator launcher.
+          flutter build ios --simulator --debug --no-codesign --no-pub \
+            --target integration_test/health_app_test.dart --verbose \
+            2>&1 | tee "$RUNNER_TEMP/ios-e2e/test-build.log"
+          python3 .github/scripts/ios_e2e.py \
+            2>&1 | tee "$RUNNER_TEMP/ios-e2e/flutter-driver.log"
       - name: Capture iOS failure diagnostics
         if: ${{ failure() || cancelled() }}
         timeout-minutes: 3
@@ -146,3 +151,9 @@ jobs:
           name: ios-e2e-diagnostics
           path: ${{ runner.temp }}/ios-e2e
           retention-days: 7
+      - name: Stop the iOS test app
+        if: ${{ always() && env.IOS_DEVICE_ID != '' }}
+        timeout-minutes: 1
+        run: |
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' build/ios/iphonesimulator/Runner.app/Info.plist)
+          xcrun simctl terminate "$IOS_DEVICE_ID" "$bundle_id" || true
