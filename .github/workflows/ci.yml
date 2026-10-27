@@ -78,8 +78,15 @@ jobs:
     needs: quality
     runs-on: macos-15
     timeout-minutes: 45
+    env:
+      # device_info_plus 13.3.0 requires Xcode >= 26.1.1; avoid the runner default.
+      DEVELOPER_DIR: /Applications/Xcode_26.1.1.app/Contents/Developer
     steps:
       - uses: actions/checkout@v6
+      - name: Verify selected Xcode and simulator SDK
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}

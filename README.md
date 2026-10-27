@@ -98,13 +98,20 @@ and [record types and permissions](https://developer.android.com/health-and-fitn
 
 ### iOS
 
-The existing deployment target is iOS 15.0. Building requires macOS, a compatible
-Xcode installation with its license accepted by the developer, and an installed
-iOS simulator runtime or configured device signing. The iOS shell and its
+The existing deployment target is iOS 15.0. Building requires macOS, Xcode 26.1.1
+or newer with its license accepted by the developer, and an installed iOS
+simulator runtime or configured device signing. The iOS shell and its
 unavailable state are covered by the configured simulator CI job. HealthKit
 entitlements, usage descriptions, native authorization, and health queries are
 outside the current implementation. Android/iOS identifiers and signing settings
 have been preserved.
+
+`health` transitively depends on `device_info_plus` 13.3.0, which
+[requires Xcode 26.1.1 or newer](https://pub.dev/packages/device_info_plus/versions/13.3.0).
+CI selects the runner's installed Xcode 26.1.1 through the iOS job's
+`DEVELOPER_DIR` and logs the selected Xcode and simulator SDK versions before
+building. This avoids relying on the runner's default Xcode without changing
+dependency versions or system-wide settings.
 
 ## Setup and execution
 
